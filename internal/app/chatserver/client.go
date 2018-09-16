@@ -2,6 +2,7 @@ package chatserver
 
 import (
 	"bufio"
+	"github.com/minaguib/chatserver/internal/app/chatserver/config"
 	"golang.org/x/time/rate"
 	"io"
 	"net"
@@ -26,12 +27,12 @@ func clientHandleNew(conn net.Conn, server *chatServer) {
 		conn:    conn,
 		ip:      conn.RemoteAddr().String(),
 		scanner: bufio.NewScanner(conn),
-		writeCH: make(chan string, 16*1024),
+		writeCH: make(chan string, config.ClientOutputMaxBufferedMessages),
 		server:  server,
-		limiter: rate.NewLimiter(1, 5),
+		limiter: rate.NewLimiter(config.ClientInputMaxRatePerSec, config.ClientInputMaxRateBurst),
 	}
 
-	name, err := client.promptName()
+	name, err := client.login()
 	if err != nil {
 		client.close("no-name")
 		return
@@ -60,7 +61,7 @@ func (client *client) close(reason string) {
 }
 
 func (client *client) tryWriteMessage(author string, message string) {
-	line := time.Now().Format("Mar 7 3:04pm:") + " [" + author + "] " + message + "\n"
+	line := time.Now().Format(config.ClientOutputTimeFormat) + ": [" + author + "] " + message + "\n"
 	client.tryWrite(line)
 }
 
@@ -77,7 +78,7 @@ func (client *client) tryWrite(line string) {
 
 func (client *client) handleWrites() {
 	for m := range client.writeCH {
-		client.conn.SetWriteDeadline(time.Now().Add(1 * time.Minute))
+		client.conn.SetWriteDeadline(time.Now().Add(config.ClientOutputWriteTimeoutSecs * time.Second))
 		if _, err := io.WriteString(client.conn, m); err != nil {
 			client.close("write-timeout")
 			break
@@ -105,9 +106,9 @@ func (client *client) doRead() {
 	client.close("read-eof")
 }
 
-func (client *client) promptName() (name string, err error) {
+func (client *client) login() (name string, err error) {
 
-	client.conn.SetDeadline(time.Now().Add(1 * time.Minute))
+	client.conn.SetDeadline(time.Now().Add(config.ClientInputLoginTimeoutSecs * time.Second))
 	defer client.conn.SetDeadline(time.Time{})
 
 	_, err = io.WriteString(client.conn, "Welcome to the chat server\n")

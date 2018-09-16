@@ -1,6 +1,7 @@
 package chatserver
 
 import (
+	"github.com/minaguib/chatserver/internal/app/chatserver/config"
 	"log"
 	"net"
 	"os"
@@ -19,7 +20,7 @@ type chatServer struct {
 func RunServer(port string) {
 	server := &chatServer{
 		port:    port,
-		bus:     make(bus, 1024*1024),
+		bus:     make(bus, config.ServerBusMaxBufferedMessages),
 		clients: make(map[*client]bool),
 		logger:  log.New(os.Stdout, "", log.LstdFlags),
 	}
