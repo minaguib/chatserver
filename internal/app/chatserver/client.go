@@ -2,12 +2,13 @@ package chatserver
 
 import (
 	"bufio"
-	"github.com/minaguib/chatserver/internal/app/chatserver/config"
-	"golang.org/x/time/rate"
 	"io"
 	"net"
 	"strings"
 	"time"
+
+	"github.com/minaguib/chatserver/internal/app/chatserver/config"
+	"golang.org/x/time/rate"
 )
 
 type client struct {

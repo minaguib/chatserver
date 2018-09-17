@@ -1,10 +1,11 @@
 package chatserver
 
 import (
-	"github.com/minaguib/chatserver/internal/app/chatserver/config"
 	"log"
 	"net"
 	"os"
+
+	"github.com/minaguib/chatserver/internal/app/chatserver/config"
 )
 
 type chatServer struct {

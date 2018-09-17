@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+
 	"github.com/minaguib/chatserver/internal/app/chatserver"
 	"github.com/minaguib/chatserver/internal/app/chatserver/config"
 )
