@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/minaguib/chatserver/internal/app/chatserver/config"
@@ -12,14 +13,15 @@ import (
 )
 
 type client struct {
-	conn     net.Conn
-	ip       string
-	name     string
-	scanner  *bufio.Scanner
-	writeCH  chan (string)
-	isClosed bool
-	server   *chatServer
-	limiter  *rate.Limiter // For handling incoming floods
+	conn         net.Conn
+	ip           string
+	name         string
+	scanner      *bufio.Scanner
+	writeCH      chan (string)
+	isClosed     bool
+	isClosedLock sync.RWMutex
+	server       *chatServer
+	limiter      *rate.Limiter // For handling incoming floods
 }
 
 func clientHandleNew(conn net.Conn, server *chatServer) {
@@ -48,12 +50,19 @@ func clientHandleNew(conn net.Conn, server *chatServer) {
 }
 
 func (client *client) close(reason string) {
-	if client.isClosed {
+
+	client.isClosedLock.Lock()
+	wasClosed := client.isClosed
+	client.isClosed = true
+	client.isClosedLock.Unlock()
+
+	if wasClosed {
 		return
 	}
-	client.isClosed = true
+
 	close(client.writeCH)
 	client.conn.Close()
+
 	/* In case we were called from tryWrite which was called from the server wheel processor,
 	write back on the bus asynchronously to avoid a potential deadlock */
 	go func() {
@@ -67,21 +76,32 @@ func (client *client) tryWriteMessage(author string, message string) {
 }
 
 func (client *client) tryWrite(line string) {
-	if client.isClosed {
-		return
+
+	writeError := false
+	client.isClosedLock.RLock()
+
+	if !client.isClosed {
+		select {
+		case client.writeCH <- line:
+			// Life is great
+		default:
+			writeError = true
+		}
 	}
-	if len(client.writeCH) < cap(client.writeCH) {
-		client.writeCH <- line
-		return
+
+	client.isClosedLock.RUnlock()
+
+	if writeError {
+		client.close("write-queue-overflow")
 	}
-	client.close("write-queue-overflow")
+
 }
 
 func (client *client) handleWrites() {
 	for m := range client.writeCH {
 		client.conn.SetWriteDeadline(time.Now().Add(config.ClientOutputWriteTimeoutSecs * time.Second))
 		if _, err := io.WriteString(client.conn, m); err != nil {
-			client.close("write-timeout")
+			client.close("write-error-or-timeout")
 			break
 		}
 	}
